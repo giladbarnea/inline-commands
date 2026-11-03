@@ -12,6 +12,7 @@ import {
 	stripFrontmatter,
 	createExtensionRuntime,
 } from "@earendil-works/pi-coding-agent";
+import { CombinedAutocompleteProvider } from "@earendil-works/pi-tui";
 const { loadExtensions } = await import(new URL("./core/extensions/loader.js", import.meta.resolve("@earendil-works/pi-coding-agent")));
 
 const extensionDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -494,6 +495,33 @@ async function main() {
 	);
 	assert(!currentProvider.delegated, "Inline non-skill token delegated to the native command provider");
 	assert(inlineNativeSuggestions === null, "Inline /settings unexpectedly produced autocomplete suggestions");
+
+	const nativeProvider = autocompleteFactory(
+		new CombinedAutocompleteProvider([{ name: "settings" }, { name: `skill:${skillName}` }], cwd),
+	);
+	const query = `/${skillName.slice(0, 5)}`;
+	for (const [linesBefore, linePrefix, lineSuffix] of [
+		[[], "Foo bar ", " tail"],
+		[[], "/ai-to-leader Foo bar ", " tail"],
+		[["/ai-to-leader first"], "", " tail"],
+		[["/ai-to-leader first"], "Foo bar ", " tail"],
+	]) {
+		const lines = [...linesBefore, `${linePrefix}${query}${lineSuffix}`];
+		const cursorLine = linesBefore.length;
+		const cursorCol = linePrefix.length + query.length;
+		const suggestions = await nativeProvider.getSuggestions(lines, cursorLine, cursorCol, {
+			signal: new AbortController().signal,
+		});
+		const item = suggestions?.items.find((candidate) => candidate.value === skillName);
+		assert(item, `Inline skill was not suggested for ${JSON.stringify(lines)}`);
+		const completion = nativeProvider.applyCompletion(lines, cursorLine, cursorCol, item, suggestions.prefix);
+		const expectedLines = [...linesBefore, `${linePrefix}/${skillName}${lineSuffix}`];
+		assert(
+			JSON.stringify(completion.lines) === JSON.stringify(expectedLines) &&
+				completion.cursorCol === linePrefix.length + skillName.length + 1,
+			`Inline skill completion lost surrounding text: ${JSON.stringify(lines)} -> ${JSON.stringify(completion)}`,
+		);
+	}
 
 	const skillLine = `please /skill:${skillName}`;
 	const skillSuggestions = await provider.getSuggestions([skillLine], 0, skillLine.length, {

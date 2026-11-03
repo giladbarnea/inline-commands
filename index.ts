@@ -130,6 +130,7 @@ type SkillAutocompleteToken = {
 	query: string;
 	referenceExpression: string | undefined;
 	skillName: string;
+	slashIndex: number;
 };
 
 const MAX_SKILL_SUGGESTIONS = 20;
@@ -309,7 +310,7 @@ async function loadSkillCatalog(cwd: string): Promise<SkillCatalog> {
 }
 
 function extractSkillAutocompleteToken(textBeforeCursor: string): SkillAutocompleteToken | undefined {
-	const match = /(?:^|\s)\/(skill:)?([a-zA-Z0-9-]*)(?:\.([^\s]*))?$/.exec(textBeforeCursor);
+	const match = /(?<=^|\s)\/(skill:)?([a-zA-Z0-9-]*)(?:\.([^\s]*))?$/.exec(textBeforeCursor);
 	if (!match) return undefined;
 	const skillName = match[2]!;
 	const referenceExpression = match[3];
@@ -322,6 +323,7 @@ function extractSkillAutocompleteToken(textBeforeCursor: string): SkillAutocompl
 		query: skillName,
 		referenceExpression,
 		skillName,
+		slashIndex: match.index,
 	};
 }
 
@@ -434,7 +436,7 @@ function createSkillAutocompleteProvider(
 				return items.length === 0 ? null : { prefix: token.prefix, items };
 			}
 
-			const atMessageStart = cursorLine === 0 && textBeforeCursor.startsWith("/");
+			const atMessageStart = cursorLine === 0 && token.slashIndex === 0;
 			const nativeSuggestions = atMessageStart
 				? await current.getSuggestions(lines, cursorLine, cursorCol, options)
 				: undefined;
